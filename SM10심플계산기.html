@@ -1,0 +1,303 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>심플 SM10 계산기</title>
+    <style>
+        :root {
+            --primary-color: #2563eb;
+            --bg-color: #f3f4f6;
+            --card-bg: #ffffff;
+            --text-color: #1f2937;
+            --buy-color: #dc2626;  /* 매수: 빨강 */
+            --sell-color: #1d4ed8; /* 매도: 파랑 */
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            margin: 0;
+            padding: 20px;
+            display: flex;
+            justify-content: center;
+            min-height: 100vh;
+        }
+
+        .container {
+            background-color: var(--card-bg);
+            width: 100%;
+            max-width: 600px;
+            padding: 30px;
+            border-radius: 16px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+        }
+
+        h1 {
+            text-align: center;
+            color: var(--text-color);
+            margin-bottom: 30px;
+            font-size: 1.8rem;
+        }
+
+        .input-group {
+            margin-bottom: 20px;
+        }
+
+        label {
+            display: block;
+            margin-bottom: 8px;
+            font-weight: 600;
+            color: #4b5563;
+        }
+
+        select, input {
+            width: 100%;
+            padding: 12px;
+            border: 2px solid #e5e7eb;
+            border-radius: 8px;
+            font-size: 16px;
+            box-sizing: border-box;
+            transition: border-color 0.2s;
+        }
+
+        select:focus, input:focus {
+            outline: none;
+            border-color: var(--primary-color);
+        }
+
+        .btn-area {
+            display: flex;
+            gap: 10px;
+            margin-top: 30px;
+        }
+
+        button {
+            flex: 1;
+            padding: 14px;
+            border: none;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: transform 0.1s;
+        }
+
+        .btn-calc {
+            background-color: var(--primary-color);
+            color: white;
+        }
+
+        .btn-reset {
+            background-color: #9ca3af;
+            color: white;
+        }
+
+        button:active {
+            transform: scale(0.98);
+        }
+
+        .result-container {
+            display: none; /* 계산 전 숨김 */
+            margin-top: 30px;
+            border-top: 2px solid #e5e7eb;
+            padding-top: 20px;
+        }
+
+        .result-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 20px;
+        }
+
+        .result-box h3 {
+            text-align: center;
+            margin-bottom: 15px;
+            padding-bottom: 10px;
+            border-bottom: 2px solid #ddd;
+        }
+
+        .buy-box h3 { color: var(--buy-color); border-color: var(--buy-color); }
+        .sell-box h3 { color: var(--sell-color); border-color: var(--sell-color); }
+
+        .price-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 10px 0;
+            border-bottom: 1px solid #f0f0f0;
+            font-size: 15px;
+        }
+
+        .price-row:last-child { border-bottom: none; }
+        
+        .label { font-weight: 500; color: #6b7280; }
+        .value { font-weight: 700; font-size: 1.1em; }
+        
+        .buy-val { color: var(--buy-color); }
+        .sell-val { color: var(--sell-color); }
+
+        @media (max-width: 480px) {
+            .result-grid {
+                grid-template-columns: 1fr;
+            }
+        }
+    </style>
+</head>
+<body>
+
+    <div class="container">
+        <h1>📊 심플 SM10 계산기</h1>
+
+        <div class="input-group">
+            <label for="stockType">종목 유형</label>
+            <select id="stockType">
+                <option value="세력주">세력주 (변동성 大)</option>
+                <option value="반수급주">반수급주 (변동성 中)</option>
+                <option value="초대형주">초대형주 (변동성 小)</option>
+            </select>
+        </div>
+
+        <div class="input-group">
+            <label for="lowPrice">저점 (매수 기준가)</label>
+            <input type="text" id="lowPrice" placeholder="예: 10000" onkeyup="formatNumber(this)">
+        </div>
+
+        <div class="input-group">
+            <label for="reboundPrice">반등저점 (매도 기준가) <span style="font-weight:normal; font-size:0.8em; color:#888;">*선택입력</span></label>
+            <input type="text" id="reboundPrice" placeholder="매수 체결 후 반등한 저점 입력" onkeyup="formatNumber(this)">
+        </div>
+
+        <div class="btn-area">
+            <button class="btn-reset" onclick="resetForm()">초기화</button>
+            <button class="btn-calc" onclick="calculate()">계산하기</button>
+        </div>
+
+        <div id="resultArea" class="result-container">
+            <div class="result-grid">
+                <div class="result-box buy-box">
+                    <h3>🔴 매수 타점</h3>
+                    <div id="buyList"></div>
+                </div>
+                
+                <div class="result-box sell-box">
+                    <h3>🔵 매도 타점</h3>
+                    <div id="sellList"></div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // 호가 단위 계산 함수 (KOSPI/KOSDAQ 공통 기준 적용)
+        function getTickSize(price) {
+            if (price < 2000) return 1;
+            if (price < 5000) return 5;
+            if (price < 20000) return 10;
+            if (price < 50000) return 50;
+            if (price < 200000) return 100;
+            if (price < 500000) return 500;
+            return 1000;
+        }
+
+        // 호가 보정 함수
+        // isBuy = true : 매수 (Ceil, 위로 보정)
+        // isBuy = false : 매도 (Floor, 아래로 보정)
+        function adjustPrice(price, isBuy) {
+            const tick = getTickSize(price);
+            if (isBuy) {
+                return Math.ceil(price / tick) * tick;
+            } else {
+                return Math.floor(price / tick) * tick;
+            }
+        }
+
+        // 숫자 콤마 포맷팅
+        function formatNumber(input) {
+            let value = input.value.replace(/[^0-9]/g, '');
+            if (value) {
+                input.value = parseInt(value).toLocaleString();
+            }
+        }
+
+        // 콤마 제거 후 숫자 변환
+        function parseNumber(str) {
+            return parseInt(str.replace(/,/g, '')) || 0;
+        }
+
+        function calculate() {
+            const type = document.getElementById('stockType').value;
+            const lowPrice = parseNumber(document.getElementById('lowPrice').value);
+            const reboundPrice = parseNumber(document.getElementById('reboundPrice').value);
+
+            if (!lowPrice) {
+                alert("저점 가격을 입력해주세요.");
+                return;
+            }
+
+            // 설정값 정의
+            const settings = {
+                '세력주': {
+                    buy: [0.03, 0.06, 0.09, 0.12],
+                    sell: [0.04, 0.05, 0.06, 0.07]
+                },
+                '반수급주': {
+                    buy: [0.025, 0.05, 0.075, 0.10],
+                    sell: [0.025, 0.035, 0.045, 0.055]
+                },
+                '초대형주': {
+                    buy: [0.02, 0.04, 0.06, 0.08],
+                    sell: [0.02, 0.03, 0.04, 0.05]
+                }
+            };
+
+            const config = settings[type];
+            let buyHtml = '';
+            let sellHtml = '';
+
+            // 1. 매수 타점 계산
+            config.buy.forEach((ratio, index) => {
+                const targetRaw = lowPrice * (1 - ratio);
+                const targetAdj = adjustPrice(targetRaw, true); // 매수는 위로
+                const percent = (ratio * 100).toFixed(1); // 소수점 한자리 표시
+                
+                buyHtml += `
+                    <div class="price-row">
+                        <span class="label">-${percent}% (${index + 1}차)</span>
+                        <span class="value buy-val">${targetAdj.toLocaleString()}원</span>
+                    </div>
+                `;
+            });
+
+            // 2. 매도 타점 계산 (반등저점이 있을 때만)
+            if (reboundPrice > 0) {
+                config.sell.forEach((ratio, index) => {
+                    const targetRaw = reboundPrice * (1 + ratio);
+                    const targetAdj = adjustPrice(targetRaw, false); // 매도는 아래로
+                    const percent = (ratio * 100).toFixed(1);
+
+                    sellHtml += `
+                        <div class="price-row">
+                            <span class="label">+${percent}% (${index + 1}차)</span>
+                            <span class="value sell-val">${targetAdj.toLocaleString()}원</span>
+                        </div>
+                    `;
+                });
+            } else {
+                sellHtml = '<div style="text-align:center; color:#999; padding:20px;">반등저점을 입력하면<br>매도 타점이 표시됩니다.</div>';
+            }
+
+            // 결과 출력
+            document.getElementById('buyList').innerHTML = buyHtml;
+            document.getElementById('sellList').innerHTML = sellHtml;
+            document.getElementById('resultArea').style.display = 'block';
+        }
+
+        function resetForm() {
+            document.getElementById('lowPrice').value = '';
+            document.getElementById('reboundPrice').value = '';
+            document.getElementById('resultArea').style.display = 'none';
+        }
+    </script>
+</body>
+</html>
